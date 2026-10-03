@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Styles') ?>
+  <style>
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 20px 0; }
+    .tile {
+      background: var(--white); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 18px 20px;
+    }
+    .tile .value { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+    .tile .value.small { font-size: 24px; }
+    .tile .label { font-size: 13px; color: var(--grey); margin-top: 4px; }
+    .tile.accent { background: var(--purple); color: var(--white); }
+    .tile.accent .label { color: rgba(255,255,255,0.85); }
+
+    .chart { width: 100%; height: auto; display: block; overflow: visible; }
+    .chart text { font-size: 11px; fill: var(--grey); font-family: inherit; }
+
+    .bars { margin-top: 10px; }
+    .bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; font-size: 14px; }
+    .bar-row .name { flex: 0 0 190px; }
+    .bar-row .track { flex: 1 1 auto; height: 20px; background: var(--tint); border-radius: 999px; overflow: hidden; }
+    .bar-row .fill { height: 100%; border-radius: 999px; }
+    .bar-row .n { flex: 0 0 84px; text-align: right; font-variant-numeric: tabular-nums; color: var(--grey); }
+
+    .missing-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .missing-list span {
+      background: #FDF3E8; border: 1px solid #E9C89A; color: #6B4415;
+      padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 600;
+    }
+
+    .pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 14px; font-size: 14px; }
+    .pager button {
+      border: 1.5px solid var(--line); background: var(--white); color: var(--purple);
+      border-radius: 999px; padding: 6px 16px; font-weight: 700; cursor: pointer; font-family: inherit; font-size: 13px;
+    }
+    .pager button:disabled { color: var(--lavender); cursor: not-allowed; }
+    .table-scroll { overflow-x: auto; }
+    .rate { font-weight: 700; }
+    .rate.low { color: var(--attention); }
+
+    @media (max-width: 640px) {
+      .bar-row .name { flex: 0 0 120px; font-size: 13px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <img id="logo" src="https://files.smartsites.parentsquare.com/4898/img_pd_102121_mxvilf.png" alt="Royalton-Hartland">
+    <div>
+      <h1 id="schoolName">Phone Check</h1>
+      <p class="sub">Trends and daily reporting</p>
+    </div>
+    <div class="spacer"></div>
+    <a class="navlink" id="checkLink" href="#">Back to check-in</a>
+    <a class="navlink" id="adminLink" href="#" style="display:none;">Admin</a>
+    <div class="who" id="who"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="boot" class="spinner" aria-label="Loading"></div>
+  <div id="app" style="display:none;">
+
+    <div class="card">
+      <div class="toolbar">
+        <div>
+          <p class="eyebrow" style="margin-bottom:4px;">Date range</p>
+          <select id="rangePick" aria-label="Date range">
+            <option value="7">Last 7 school days</option>
+            <option value="30" selected>Last 30 school days</option>
+            <option value="90">Last 90 school days</option>
+            <option value="0">Whole year</option>
+          </select>
+        </div>
+        <div>
+          <p class="eyebrow" style="margin-bottom:4px;">Section</p>
+          <select id="sectionPick" aria-label="Section"><option value="">All sections</option></select>
+        </div>
+        <div class="spacer" style="flex:1 1 auto;"></div>
+        <button type="button" class="btn ghost small" id="csvBtn" style="align-self:flex-end;">Download CSV</button>
+      </div>
+      <p class="muted" id="stamp" style="margin-top:12px;"></p>
+    </div>
+
+    <div id="alerts"></div>
+    <div class="tiles" id="tiles"></div>
+
+    <div class="card" id="todayCard">
+      <p class="eyebrow">Today</p>
+      <h2 id="todayHead"></h2>
+      <p class="lede" id="todaySub"></p>
+      <div class="missing-list" id="missingList"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Day by day</p>
+      <h2>Where phones ended up</h2>
+      <p class="lede">Each bar is one school day, stacked by what teachers reported.</p>
+      <div id="trendChart" style="margin-top:18px;"></div>
+      <div class="legend" id="legend" style="display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--grey);margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">Overall</p>
+      <h2>Status breakdown</h2>
+      <div class="bars" id="statusBars"></div>
+    </div>
+
+    <div class="card">
+      <p class="eyebrow">By section</p>
+      <h2>First period sections</h2>
+      <p class="lede">Days reported shows how consistently each section is submitting.</p>
+      <div class="table-scroll" style="margin-top:16px;">
+        <table class="data" id="sectionTable"></table>
+      </div>
+    </div>
+
+    <div class="card" id="studentCard">
+      <p class="eyebrow">By student</p>
+      <h2>Student history</h2>
+      <p class="lede" id="studentScope"></p>
+      <div class="toolbar" style="margin:16px 0 10px;">
+        <div class="grow"><input type="search" id="studentFilter" placeholder="Find a student or section" aria-label="Find a student"></div>
+      </div>
+      <div class="table-scroll"><table class="data" id="studentTable"></table></div>
+      <div class="pager" id="pager"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  var DATA = null, PAGE = 1, PER_PAGE = 30;
+
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+  function alertBox(msg, kind) {
+    el('alerts').innerHTML = '<div class="banner ' + (kind || '') + '">' + esc(msg) + '</div>';
+  }
+
+  function load() {
+    el('boot').style.display = '';
+    google.script.run
+      .withSuccessHandler(render)
+      .withFailureHandler(function (err) {
+        el('boot').style.display = 'none';
+        el('app').style.display = '';
+        alertBox(err.message || String(err), 'error');
+      })
+      .getReportSummary({ days: Number(el('rangePick').value), section: el('sectionPick').value });
+  }
+  load();
+
+  function render(d) {
+    DATA = d;
+    PAGE = 1;
+    el('boot').style.display = 'none';
+    el('app').style.display = '';
+    el('alerts').innerHTML = '';
+
+    el('logo').src = d.logoUrl;
+    el('schoolName').textContent = d.schoolName;
+    el('who').textContent = d.user.name;
+    el('checkLink').href = d.appUrl;
+    if (d.user.isAdmin) {
+      el('adminLink').href = d.appUrl + '?page=admin';
+      el('adminLink').style.display = '';
+    }
+    el('stamp').textContent = 'Updated ' + d.generatedAt + ' \u00b7 ' + d.totals.entries.toLocaleString() + ' entries in this range';
+
+    if (el('sectionPick').options.length === 1) {
+      d.sections.forEach(function (s) {
+        var o = document.createElement('option'); o.value = s; o.textContent = s;
+        el('sectionPick').appendChild(o);
+      });
+    }
+
+    renderTiles(d);
+    renderToday(d);
+    renderTrend(d);
+    renderStatusBars(d);
+    renderSections(d);
+    loadStudents();
+  }
+
+  // The student table is the heaviest part of the payload, so it arrives after
+  // the page has already drawn rather than holding everything up.
+  function loadStudents() {
+    DATA.byStudent = null;
+    el('studentCard').style.display = '';
+    el('studentTable').innerHTML = '';
+    el('pager').innerHTML = '';
+    el('studentScope').textContent = 'Loading\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        DATA.byStudent = res.rows;
+        DATA.studentDetailScope = res.scope;
+        PAGE = 1;
+        renderStudents();
+      })
+      .withFailureHandler(function (err) {
+        el('studentScope').textContent = err.message || String(err);
+      })
+      .getStudentDetail({ days: Number(el('rangePick').value), section: el('sectionPick').value });
+  }
+
+  function colorFor(name) {
+    var hit = DATA.statuses.filter(function (s) { return s.name === name; })[0];
+    return hit ? hit.color : '#AC9AC9';
+  }
+
+  function renderTiles(d) {
+    var rate = d.totals.complianceRate;
+    var attentionName = (d.statuses.filter(function (s) { return s.category === 'Attention'; })[0] || {}).name || 'flagged';
+    el('tiles').innerHTML =
+      tile(d.today.submitted + ' / ' + d.today.expected, 'Sections reported today', true) +
+      tile(rate === null ? '\u2014' : rate + '%', 'Phones handled as expected') +
+      tile(d.totals.attention.toLocaleString(), esc(attentionName) + ' entries') +
+      tile(d.trend.length.toLocaleString(), 'School days with data');
+  }
+  function tile(value, label, accent) {
+    var small = String(value).length > 7 ? ' small' : '';
+    return '<div class="tile' + (accent ? ' accent' : '') + '">' +
+             '<div class="value' + small + '">' + value + '</div>' +
+             '<div class="label">' + label + '</div>' +
+           '</div>';
+  }
+
+  function renderToday(d) {
+    var n = d.today.missing.length;
+    el('todayHead').textContent = n === 0
+      ? 'Every section has reported'
+      : n + ' section' + (n === 1 ? '' : 's') + ' still out';
+    el('todaySub').textContent = n === 0
+      ? 'All ' + d.today.expected + ' first period sections submitted for ' + d.today.date + '.'
+      : 'These sections have not submitted for ' + d.today.date + ' yet.';
+    el('missingList').innerHTML = d.today.missing.map(function (m) {
+      return '<span>' + esc(m.section) + (m.teacher ? ' \u2014 ' + esc(m.teacher) : '') + '</span>';
+    }).join('');
+  }
+
+  function renderTrend(d) {
+    var days = d.trend;
+    if (!days.length) { el('trendChart').innerHTML = '<p class="muted">No entries in this range yet.</p>'; return; }
+
+    var W = 900, H = 260, padL = 38, padR = 10, padT = 10, padB = 34;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    var max = Math.max.apply(null, days.map(function (x) { return x.total; })) || 1;
+    var slot = plotW / days.length;
+    var bw = Math.max(3, Math.min(30, slot * 0.68));
+
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Daily phone status totals">';
+    for (var g = 0; g <= 4; g++) {
+      var y = padT + plotH - (plotH * g / 4);
+      svg += '<line x1="' + padL + '" y1="' + y + '" x2="' + (W - padR) + '" y2="' + y + '" stroke="#E4DDEE" stroke-width="1"/>';
+      svg += '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" text-anchor="end">' + Math.round(max * g / 4) + '</text>';
+    }
+
+    var step = Math.ceil(days.length / 14);
+    days.forEach(function (day, i) {
+      var x = padL + slot * i + (slot - bw) / 2;
+      var yBase = padT + plotH;
+      DATA.statuses.forEach(function (st) {
+        var n = day.counts[st.name] || 0;
+        if (!n) return;
+        var h = (n / max) * plotH;
+        yBase -= h;
+        svg += '<rect x="' + x.toFixed(1) + '" y="' + yBase.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) +
+               '" fill="' + st.color + '"><title>' + esc(day.label + ' \u2014 ' + st.name + ': ' + n) + '</title></rect>';
+      });
+      if (i % step === 0) {
+        svg += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 12) + '" text-anchor="middle">' + esc(day.label) + '</text>';
+      }
+    });
+    svg += '</svg>';
+    el('trendChart').innerHTML = svg;
+
+    el('legend').innerHTML = DATA.statuses.map(function (s) {
+      return '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + esc(s.color) + ';margin-right:5px;"></span>' + esc(s.name) + '</span>';
+    }).join('');
+  }
+
+  function renderStatusBars(d) {
+    var total = d.totals.entries || 1;
+    el('statusBars').innerHTML = d.statuses.map(function (s) {
+      var n = d.byStatus[s.name] || 0;
+      var pct = (n / total) * 100;
+      return '<div class="bar-row">' +
+               '<span class="name">' + esc(s.name) + '</span>' +
+               '<span class="track"><span class="fill" style="width:' + pct.toFixed(1) + '%;background:' + esc(s.color) + '"></span></span>' +
+               '<span class="n">' + n.toLocaleString() + ' \u00b7 ' + pct.toFixed(1) + '%</span>' +
+             '</div>';
+    }).join('');
+  }
+
+  function renderSections(d) {
+    var head = '<thead><tr><th>Section</th><th>Teacher</th><th class="num">Entries</th>' +
+               '<th class="num">Days reported</th><th class="num">Flagged</th><th class="num">As expected</th></tr></thead>';
+    var body = d.bySection.map(function (s) {
+      var rate = s.complianceRate;
+      var low = rate !== null && rate < 90;
+      return '<tr>' +
+        '<td><strong>' + esc(s.section) + '</strong></td>' +
+        '<td>' + esc(s.teacher || '\u2014') + '</td>' +
+        '<td class="num">' + s.total.toLocaleString() + '</td>' +
+        '<td class="num">' + s.daysSubmitted + ' of ' + s.daysExpected + '</td>' +
+        '<td class="num">' + s.attention + '</td>' +
+        '<td class="num rate' + (low ? ' low' : '') + '">' + (rate === null ? '\u2014' : rate + '%') + '</td>' +
+      '</tr>';
+    }).join('');
+    el('sectionTable').innerHTML = head + '<tbody>' + (body || '<tr><td colspan="6" class="muted">No sections in this range.</td></tr>') + '</tbody>';
+  }
+
+  el('studentFilter').addEventListener('input', function () { PAGE = 1; renderStudents(); });
+
+  function filteredStudents() {
+    var q = el('studentFilter').value.trim().toLowerCase();
+    if (!q) return DATA.byStudent;
+    return DATA.byStudent.filter(function (s) {
+      return s.name.toLowerCase().indexOf(q) > -1 || s.section.toLowerCase().indexOf(q) > -1;
+    });
+  }
+
+  function renderStudents() {
+    var d = DATA;
+    if (!d.byStudent || !d.byStudent.length) {
+      el('studentCard').style.display = 'none';
+      return;
+    }
+    el('studentCard').style.display = '';
+    el('studentScope').textContent = d.studentDetailScope === 'all'
+      ? 'Every student in the selected range, sorted so flagged entries rise to the top.'
+      : 'Students in your own first period sections. Building administrators see the full list.';
+
+    var rows = filteredStudents();
+    var pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+    if (PAGE > pages) PAGE = pages;
+    var slice = rows.slice((PAGE - 1) * PER_PAGE, PAGE * PER_PAGE);
+
+    var head = '<thead><tr><th>Student</th><th>Section</th><th class="num">Days logged</th>' +
+               '<th class="num">Flagged</th><th>Most recent</th></tr></thead>';
+    var body = slice.map(function (s) {
+      return '<tr>' +
+        '<td><strong>' + esc(s.name) + '</strong></td>' +
+        '<td>' + esc(s.section) + '</td>' +
+        '<td class="num">' + s.total + '</td>' +
+        '<td class="num"' + (s.attention ? ' style="color:var(--attention);font-weight:700;"' : '') + '>' + s.attention + '</td>' +
+        '<td><span class="pill" style="background:' + esc(colorFor(s.lastStatus)) + '">' + esc(s.lastStatus) + '</span> ' +
+            '<span class="muted">' + esc(s.lastDate) + '</span></td>' +
+      '</tr>';
+    }).join('');
+    el('studentTable').innerHTML = head + '<tbody>' + (body || '<tr><td colspan="5" class="muted">No students match that search.</td></tr>') + '</tbody>';
+
+    el('pager').innerHTML =
+      '<span class="muted">' + rows.length.toLocaleString() + ' students \u00b7 page ' + PAGE + ' of ' + pages + '</span>' +
+      '<button type="button" id="prevBtn"' + (PAGE <= 1 ? ' disabled' : '') + '>Previous</button>' +
+      '<button type="button" id="nextBtn"' + (PAGE >= pages ? ' disabled' : '') + '>Next</button>';
+    el('prevBtn').onclick = function () { if (PAGE > 1) { PAGE--; renderStudents(); window.scrollTo({ top: el('studentCard').offsetTop - 20 }); } };
+    el('nextBtn').onclick = function () { if (PAGE < pages) { PAGE++; renderStudents(); window.scrollTo({ top: el('studentCard').offsetTop - 20 }); } };
+  }
+
+  el('rangePick').addEventListener('change', load);
+  el('sectionPick').addEventListener('change', load);
+
+  el('csvBtn').addEventListener('click', function () {
+    var btn = el('csvBtn');
+    btn.disabled = true; btn.textContent = 'Building\u2026';
+    google.script.run
+      .withSuccessHandler(function (csv) {
+        btn.disabled = false; btn.textContent = 'Download CSV';
+        var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'phone-check-' + new Date().toISOString().slice(0, 10) + '.csv';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false; btn.textContent = 'Download CSV';
+        alertBox(err.message || String(err), 'error');
+      })
+      .exportCsv({ days: Number(el('rangePick').value), section: el('sectionPick').value });
+  });
+</script>
+</body>
+</html>
