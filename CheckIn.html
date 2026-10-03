@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Styles') ?>
+  <style>
+    .datebar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+    .datebar select { width: auto; min-width: 190px; }
+
+    .progress-shell {
+      height: 8px; background: var(--tint); border-radius: 999px;
+      overflow: hidden; margin: 14px 0 4px; border: 1px solid var(--line);
+    }
+    .progress-fill { height: 100%; background: var(--purple); width: 0%; transition: width 0.25s ease; }
+
+    ul.students { list-style: none; margin: 0; padding: 0; }
+    li.student {
+      display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+      padding: 12px 4px; border-bottom: 1px solid var(--line);
+    }
+    li.student:last-child { border-bottom: none; }
+    li.student.done { background: rgba(99, 65, 154, 0.035); }
+    .sname { flex: 1 1 190px; min-width: 150px; font-weight: 600; }
+    .sname .meta { display: block; font-weight: 400; font-size: 12px; color: var(--grey); }
+
+    .choices { display: flex; gap: 6px; flex-wrap: wrap; }
+    .choices label {
+      display: inline-block; cursor: pointer; font-size: 13px; font-weight: 600;
+      padding: 7px 15px; border-radius: 999px; border: 1.5px solid var(--line);
+      color: var(--grey); background: var(--white); user-select: none;
+      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    .choices input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .choices label:hover { border-color: var(--lavender); color: var(--ink); }
+    .choices label.sel { color: var(--white); border-color: transparent; }
+    .choices input:focus-visible + span { outline: 3px solid var(--purple-dark); outline-offset: 3px; border-radius: 999px; }
+
+    .roster-panel {
+      border: 1.5px solid var(--line); border-radius: 12px;
+      padding: 18px; margin-top: 16px; background: var(--tint);
+    }
+    .roster-panel textarea {
+      width: 100%; min-height: 90px; font-family: inherit; font-size: 15px;
+      border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 14px;
+      background: var(--white); color: var(--ink); resize: vertical;
+    }
+    .roster-panel textarea:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(99,65,154,0.15); }
+    .roster-current { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 4px; }
+    .roster-current button {
+      background: var(--white); border: 1.5px solid var(--line); color: var(--ink);
+      border-radius: 999px; padding: 5px 12px 5px 14px; font-size: 13px;
+      font-family: inherit; cursor: pointer;
+    }
+    .roster-current button:hover { border-color: var(--attention); color: var(--attention); }
+    .roster-current button span { color: var(--grey); margin-left: 7px; font-weight: 700; }
+
+    .savebar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+      background: var(--white); border-top: 1px solid var(--line);
+      box-shadow: 0 -4px 18px rgba(99, 65, 154, 0.13); padding: 12px 20px;
+    }
+    .savebar-inner {
+      max-width: 1080px; margin: 0 auto;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    .savebar .count { font-weight: 700; }
+    .savebar .spacer { flex: 1 1 auto; }
+
+    .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--grey); margin-top: 12px; }
+    .legend span.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <img id="logo" src="https://files.smartsites.parentsquare.com/4898/img_pd_102121_mxvilf.png" alt="Royalton-Hartland">
+    <div>
+      <h1 id="schoolName">Phone Check</h1>
+      <p class="sub" id="periodLabel"></p>
+    </div>
+    <div class="spacer"></div>
+    <a class="navlink" id="reportLink" href="#">Trends report</a>
+    <a class="navlink" id="adminLink" href="#" style="display:none;">Admin</a>
+    <div class="who" id="who"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="boot" class="spinner" aria-label="Loading"></div>
+  <div id="app" style="display:none;">
+
+    <div class="card">
+      <p class="eyebrow">Today</p>
+      <div class="datebar">
+        <h2 id="dateLabel" style="flex:1 1 auto;"></h2>
+        <select id="sectionPick" aria-label="Section" style="display:none;"></select>
+        <select id="datePick" aria-label="Date" style="display:none;"></select>
+      </div>
+      <p class="lede" id="statusLine">Mark every student, then save.</p>
+      <div class="progress-shell"><div class="progress-fill" id="progressFill"></div></div>
+    </div>
+
+    <div id="alerts"></div>
+
+    <div class="card">
+      <div class="toolbar" style="margin-bottom:14px;">
+        <div class="grow">
+          <input type="search" id="filter" placeholder="Find a student" aria-label="Find a student">
+        </div>
+        <button type="button" class="btn ghost small" id="fillRest">Fill the rest</button>
+        <button type="button" class="btn ghost small" id="copyPrev">Copy last school day</button>
+        <button type="button" class="btn ghost small" id="clearAll">Clear all</button>
+        <button type="button" class="btn ghost small" id="rosterToggle" style="display:none;">Edit roster</button>
+      </div>
+
+      <div class="roster-panel" id="rosterPanel" style="display:none;">
+        <p class="eyebrow">Roster for <span id="rosterSection"></span></p>
+        <p class="muted" style="margin:0 0 10px;">
+          One student per line. You can paste a column straight out of a spreadsheet.
+          Add an ID and grade after a comma if you have them: <em>Doe John, 102345, 10</em>
+        </p>
+        <textarea id="addNames" placeholder="Doe John&#10;Roe Jane"></textarea>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+          <button type="button" class="btn small" id="addStudentsBtn">Add to roster</button>
+          <button type="button" class="btn ghost small" id="rosterClose">Done</button>
+        </div>
+        <p class="eyebrow" style="margin:20px 0 0;">Remove a student</p>
+        <div class="roster-current" id="rosterCurrent"></div>
+        <p class="muted" style="margin:0;">Removing takes a student off the list going forward. Their past entries stay in the record.</p>
+      </div>
+
+      <ul class="students" id="list"></ul>
+      <p class="muted" id="empty" style="display:none;padding:24px 4px;">
+        No students on this roster yet. Use <strong>Edit roster</strong> to add them, or ask the office to import the class list.
+      </p>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+</div>
+
+<div class="savebar" id="savebar" style="display:none;">
+  <div class="savebar-inner">
+    <span class="count" id="countText">0 of 0 marked</span>
+    <span class="muted" id="savedNote"></span>
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="saveBtn">Save check-in</button>
+  </div>
+</div>
+
+<script>
+  var BOOT = null, DAY = null, DIRTY = false;
+
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+  function alertBox(msg, kind) {
+    el('alerts').innerHTML = '<div class="banner ' + (kind || '') + '">' + esc(msg) + '</div>';
+    if (kind === 'ok') setTimeout(function () { el('alerts').innerHTML = ''; }, 5000);
+  }
+
+  // One round trip: identity, statuses, and today's roster arrive together.
+  google.script.run
+    .withSuccessHandler(onPayload)
+    .withFailureHandler(function (err) {
+      el('boot').style.display = 'none';
+      el('app').style.display = '';
+      alertBox(err.message || String(err), 'error');
+    })
+    .getCheckInPayload('', '');
+
+  function onPayload(p) {
+    onBoot(p.boot);
+    if (!p.day) return;
+    el('sectionPick').value = p.day.section;
+    onDay(p.day);
+  }
+
+  function onBoot(b) {
+    BOOT = b;
+    el('logo').src = b.logoUrl;
+    el('schoolName').textContent = b.schoolName;
+    el('periodLabel').textContent = b.periodLabel + ' phone check';
+    el('who').textContent = b.user.name;
+    el('reportLink').href = b.appUrl + '?page=report';
+    if (b.user.isAdmin) {
+      el('adminLink').href = b.appUrl + '?page=admin';
+      el('adminLink').style.display = '';
+    }
+
+    if (b.quickFill) el('fillRest').textContent = 'Fill the rest: ' + b.quickFill.short;
+    else el('fillRest').style.display = 'none';
+    if (b.allowRosterEdits) el('rosterToggle').style.display = '';
+
+    if (!b.allSections.length) {
+      el('boot').style.display = 'none';
+      el('app').style.display = '';
+      alertBox('Your account is not linked to a first period section yet. Email the tech office and we will add you.', 'error');
+      return;
+    }
+
+    var sp = el('sectionPick');
+    b.allSections.forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s; o.textContent = s; sp.appendChild(o);
+    });
+    if (b.allSections.length > 1) sp.style.display = '';
+    sp.addEventListener('change', function () { guardUnsaved(loadDay); });
+
+    var dp = el('datePick');
+    buildDateOptions(dp, b.today);
+    if (b.user.isAdmin) dp.style.display = '';
+    dp.addEventListener('change', function () { guardUnsaved(loadDay); });
+
+    renderLegend();
+  }
+
+  function buildDateOptions(sel, today) {
+    var d = new Date(today + 'T12:00:00');
+    for (var i = 0; i < 10; i++) {
+      var iso = d.toISOString().slice(0, 10);
+      if (d.getDay() !== 0 && d.getDay() !== 6) {
+        var o = document.createElement('option');
+        o.value = iso;
+        o.textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+        sel.appendChild(o);
+      }
+      d.setDate(d.getDate() - 1);
+    }
+  }
+
+  function renderLegend() {
+    el('legend').innerHTML = BOOT.statuses.map(function (s) {
+      return '<span><span class="dot" style="background:' + esc(s.color) + '"></span>' + esc(s.name) + '</span>';
+    }).join('');
+  }
+
+  function guardUnsaved(next) {
+    if (DIRTY && !confirm('You have unsaved marks. Leave them behind?')) return;
+    DIRTY = false;
+    next();
+  }
+
+  function loadDay() {
+    el('boot').style.display = '';
+    el('app').style.display = 'none';
+    el('savebar').style.display = 'none';
+    google.script.run
+      .withSuccessHandler(onDay)
+      .withFailureHandler(function (err) {
+        el('boot').style.display = 'none';
+        el('app').style.display = '';
+        alertBox(err.message || String(err), 'error');
+      })
+      .getSectionDay(el('sectionPick').value, el('datePick').value || BOOT.today);
+  }
+
+  function onDay(day) {
+    DAY = day;
+    DIRTY = false;
+    el('boot').style.display = 'none';
+    el('app').style.display = '';
+    el('savebar').style.display = '';
+    el('alerts').innerHTML = '';
+
+    el('dateLabel').textContent = day.dateLabel;
+    el('statusLine').textContent = day.submittedAt
+      ? 'Submitted at ' + day.submittedAt + '. Change anything you need and save again.'
+      : 'Mark every student, then save. You can come back and edit later.';
+
+    if (day.locked) {
+      alertBox('Entries for this day are closed. Contact the main office if something needs to change.', '');
+      el('saveBtn').disabled = true;
+    } else {
+      el('saveBtn').disabled = false;
+    }
+
+    el('copyPrev').style.display = day.previousDate ? '' : 'none';
+    el('empty').style.display = day.students.length ? 'none' : '';
+    el('rosterSection').textContent = day.section;
+    renderList();
+    renderRosterPanel();
+  }
+
+  function renderList() {
+    var q = el('filter').value.trim().toLowerCase();
+    el('list').innerHTML = DAY.students.map(function (s, i) {
+      if (q && s.name.toLowerCase().indexOf(q) === -1) return '';
+      var choices = BOOT.statuses.map(function (st) {
+        var on = s.status === st.name;
+        return '<label class="' + (on ? 'sel' : '') + '"' + (on ? ' style="background:' + esc(st.color) + '"' : '') + '>' +
+                 '<input type="radio" name="s' + i + '" value="' + esc(st.name) + '"' + (on ? ' checked' : '') +
+                 ' data-i="' + i + '" ' + (DAY.locked ? 'disabled' : '') + '>' +
+                 '<span>' + esc(st.short) + '</span>' +
+               '</label>';
+      }).join('');
+      return '<li class="student' + (s.status ? ' done' : '') + '" data-i="' + i + '">' +
+               '<span class="sname">' + esc(s.name) +
+                 (s.grade ? '<span class="meta">Grade ' + esc(s.grade) + '</span>' : '') +
+               '</span>' +
+               '<span class="choices">' + choices + '</span>' +
+             '</li>';
+    }).join('');
+    updateCount();
+  }
+
+  el('list').addEventListener('change', function (e) {
+    var input = e.target;
+    if (input.type !== 'radio') return;
+    var i = Number(input.getAttribute('data-i'));
+    DAY.students[i].status = input.value;
+    DIRTY = true;
+    var li = input.closest('li.student');
+    li.classList.add('done');
+    li.querySelectorAll('label').forEach(function (lab) {
+      var box = lab.querySelector('input');
+      lab.classList.toggle('sel', box.checked);
+      lab.style.background = box.checked ? colorFor(box.value) : '';
+    });
+    updateCount();
+  });
+
+  function colorFor(name) {
+    var hit = BOOT.statuses.filter(function (s) { return s.name === name; })[0];
+    return hit ? hit.color : '#63419A';
+  }
+
+  function updateCount() {
+    var done = DAY.students.filter(function (s) { return s.status; }).length;
+    var total = DAY.students.length;
+    el('countText').textContent = done + ' of ' + total + ' marked';
+    el('progressFill').style.width = total ? (done / total * 100) + '%' : '0%';
+    el('savedNote').textContent = DIRTY ? 'Unsaved changes' : (DAY.submittedAt ? 'Saved ' + DAY.submittedAt : '');
+  }
+
+  el('filter').addEventListener('input', renderList);
+
+  el('fillRest').addEventListener('click', function () {
+    if (DAY.locked || !BOOT.quickFill) return;
+    var n = 0;
+    DAY.students.forEach(function (s) { if (!s.status) { s.status = BOOT.quickFill.name; n++; } });
+    DIRTY = true;
+    renderList();
+    alertBox(n ? 'Marked ' + n + ' students as "' + BOOT.quickFill.name + '". Nothing is saved until you tap Save.' : 'Everyone is already marked.', 'ok');
+  });
+
+  el('clearAll').addEventListener('click', function () {
+    if (DAY.locked) return;
+    if (!confirm('Clear every mark on this screen? Nothing is deleted until you save.')) return;
+    DAY.students.forEach(function (s) { s.status = ''; });
+    DIRTY = true;
+    renderList();
+  });
+
+  el('copyPrev').addEventListener('click', function () {
+    if (DAY.locked) return;
+    var n = 0;
+    DAY.students.forEach(function (s) { if (!s.status && s.previous) { s.status = s.previous; n++; } });
+    DIRTY = true;
+    renderList();
+    alertBox(n ? 'Carried over ' + n + ' marks from the last school day. Check them before saving.' : 'Nothing to carry over.', 'ok');
+  });
+
+  // ---- roster editing -----------------------------------------------------
+  el('rosterToggle').addEventListener('click', function () {
+    var open = el('rosterPanel').style.display !== 'none';
+    el('rosterPanel').style.display = open ? 'none' : '';
+    el('rosterToggle').textContent = open ? 'Edit roster' : 'Hide roster editor';
+    if (!open) el('addNames').focus();
+  });
+  el('rosterClose').addEventListener('click', function () {
+    el('rosterPanel').style.display = 'none';
+    el('rosterToggle').textContent = 'Edit roster';
+  });
+
+  function renderRosterPanel() {
+    el('rosterCurrent').innerHTML = DAY.students.map(function (s) {
+      return '<button type="button" data-name="' + esc(s.name) + '">' + esc(s.name) + '<span>&times;</span></button>';
+    }).join('') || '<span class="muted">Nobody on the roster yet.</span>';
+  }
+
+  el('rosterCurrent').addEventListener('click', function (e) {
+    var btn = e.target.closest('button');
+    if (!btn) return;
+    var name = btn.getAttribute('data-name');
+    if (!confirm('Remove ' + name + ' from this roster? Past entries are kept.')) return;
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function () { loadDay(); })
+      .withFailureHandler(function (err) { btn.disabled = false; alertBox(err.message || String(err), 'error'); })
+      .setStudentActive(DAY.section, name, false);
+  });
+
+  el('addStudentsBtn').addEventListener('click', function () {
+    var text = el('addNames').value.trim();
+    if (!text) { alertBox('Type at least one name first.', 'error'); return; }
+    var btn = el('addStudentsBtn');
+    btn.disabled = true; btn.textContent = 'Adding\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Add to roster';
+        el('addNames').value = '';
+        var parts = [];
+        if (res.added) parts.push(res.added + ' added');
+        if (res.reactivated) parts.push(res.reactivated + ' put back on the list');
+        alertBox(parts.length ? parts.join(', ') + '.' : 'Everyone on that list was already here.', 'ok');
+        loadDay();
+      })
+      .withFailureHandler(function (err) {
+        btn.disabled = false; btn.textContent = 'Add to roster';
+        alertBox(err.message || String(err), 'error');
+      })
+      .addStudents(DAY.section, text);
+  });
+
+  // ---- save ---------------------------------------------------------------
+  el('saveBtn').addEventListener('click', function () {
+    var entries = DAY.students.filter(function (s) { return s.status; })
+      .map(function (s) { return { id: s.id, name: s.name, status: s.status, note: s.note || '' }; });
+    if (!entries.length) { alertBox('Mark at least one student before saving.', 'error'); return; }
+
+    var missing = DAY.students.length - entries.length;
+    if (missing > 0 && !confirm(missing + ' student' + (missing === 1 ? '' : 's') + ' still unmarked. Save anyway?')) return;
+
+    el('saveBtn').disabled = true;
+    el('saveBtn').textContent = 'Saving\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        DIRTY = false;
+        DAY.submittedAt = res.at;
+        el('saveBtn').disabled = false;
+        el('saveBtn').textContent = 'Save check-in';
+        alertBox('Saved ' + res.saved + ' students at ' + res.at + '.', 'ok');
+        updateCount();
+      })
+      .withFailureHandler(function (err) {
+        el('saveBtn').disabled = false;
+        el('saveBtn').textContent = 'Save check-in';
+        alertBox(err.message || String(err), 'error');
+      })
+      .submitCheckIn({ section: DAY.section, date: DAY.date, entries: entries });
+  });
+
+  window.addEventListener('beforeunload', function (e) {
+    if (DIRTY) { e.preventDefault(); e.returnValue = ''; }
+  });
+</script>
+</body>
+</html>
