@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <?!= include('Styles') ?>
+  <style>
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin: 18px 0 0; }
+    .tile { background: var(--tint); border-radius: 12px; padding: 14px 16px; }
+    .tile .value { font-size: 26px; font-weight: 700; line-height: 1.1; }
+    .tile .label { font-size: 12px; color: var(--grey); margin-top: 3px; }
+
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+    .field .hint { font-size: 12px; color: var(--grey); margin: 4px 0 0; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0 16px; }
+
+    textarea {
+      width: 100%; min-height: 110px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px; border: 1.5px solid var(--line); border-radius: 10px;
+      padding: 10px 14px; background: var(--white); color: var(--ink); resize: vertical;
+    }
+    textarea:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px rgba(99,65,154,0.15); }
+
+    .radios { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; }
+    .radios label { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+    .radios input { accent-color: var(--purple); }
+
+    input[type="file"] { font-size: 14px; font-family: inherit; }
+
+    .subhead { border-top: 1px solid var(--line); margin-top: 26px; padding-top: 22px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+
+    .chip {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .chip.on { background: var(--tint); color: var(--purple); }
+    .chip.off { background: #F1EFEF; color: var(--grey); }
+    .chip.admin { background: var(--purple); color: var(--white); }
+    .chip.warn { background: #FDF3E8; color: #6B4415; }
+
+    .linkbtn {
+      background: none; border: none; color: var(--purple); font-family: inherit;
+      font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 6px;
+    }
+    .linkbtn:hover { text-decoration: underline; }
+    .linkbtn.danger { color: var(--attention); }
+
+    .pager { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 14px; font-size: 14px; }
+    .pager button {
+      border: 1.5px solid var(--line); background: var(--white); color: var(--purple);
+      border-radius: 999px; padding: 6px 16px; font-weight: 700; cursor: pointer;
+      font-family: inherit; font-size: 13px;
+    }
+    .pager button:disabled { color: var(--lavender); cursor: not-allowed; }
+    .table-scroll { overflow-x: auto; }
+
+    code.url {
+      display: block; background: var(--tint); border-radius: 8px; padding: 9px 12px;
+      font-size: 12px; word-break: break-all; margin: 4px 0 12px; color: var(--purple-dark);
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <img id="logo" src="https://files.smartsites.parentsquare.com/4898/img_pd_102121_mxvilf.png" alt="Royalton-Hartland">
+    <div>
+      <h1 id="schoolName">Phone Check</h1>
+      <p class="sub">Admin console</p>
+    </div>
+    <div class="spacer"></div>
+    <a class="navlink" id="checkLink" href="#" style="display:none;">Check-in</a>
+    <a class="navlink" id="reportLink" href="#" style="display:none;">Trends report</a>
+    <div class="who" id="who"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div id="boot" class="spinner" aria-label="Loading"></div>
+  <div id="alerts"></div>
+
+  <!-- ============ not set up yet ============ -->
+  <div id="setupView" style="display:none;">
+    <div class="card">
+      <p class="eyebrow">First run</p>
+      <h2>Create the data spreadsheet</h2>
+      <p class="lede" style="margin-top:8px;">
+        Phone Check keeps its own spreadsheet for settings, rosters, and the daily log. It will be created
+        in your Drive and owned by you. The original collection sheet is never written to, so view-only
+        access to it is fine.
+      </p>
+      <div class="actions">
+        <button type="button" class="btn" id="setupBtn">Create it now</button>
+      </div>
+      <p class="muted" id="setupNote" style="margin-top:14px;"></p>
+    </div>
+  </div>
+
+  <!-- ============ not an admin ============ -->
+  <div id="denyView" style="display:none;">
+    <div class="card">
+      <p class="eyebrow">Admin only</p>
+      <h2>You don't have access to this page</h2>
+      <p class="lede" style="margin-top:8px;">
+        The admin console is limited to building administrators and the tech office. If you need to be
+        added, email the tech office. Teachers can head straight to the check-in.
+      </p>
+      <div class="actions"><a class="btn" id="denyBack" href="#">Go to the check-in</a></div>
+    </div>
+  </div>
+
+  <!-- ============ main console ============ -->
+  <div id="adminView" style="display:none;">
+
+    <div class="card">
+      <p class="eyebrow">Status</p>
+      <h2 id="dataName">Phone Check</h2>
+      <p class="lede">
+        <a id="dataLink" href="#" target="_blank">Open the data spreadsheet</a> \u00b7 everything below writes into it.
+      </p>
+      <div class="tiles" id="tiles"></div>
+
+      <div class="subhead">
+        <p class="eyebrow">Links to share</p>
+        <p class="muted" style="margin:0 0 8px;">Teacher check-in</p>
+        <code class="url" id="urlCheck"></code>
+        <p class="muted" style="margin:0 0 8px;">Trends report</p>
+        <code class="url" id="urlReport"></code>
+      </div>
+
+      <div class="subhead">
+        <p class="eyebrow">Daily email</p>
+        <p class="lede" id="triggerState"></p>
+        <div class="actions">
+          <button type="button" class="btn ghost small" id="triggerBtn">Install daily reminders</button>
+          <button type="button" class="btn ghost small" id="gridBtn">Rebuild printable grid</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---------- teachers ---------- -->
+    <div class="card">
+      <p class="eyebrow">Teachers and sections</p>
+      <h2>Who submits, and for which class</h2>
+      <p class="lede">
+        Section is the link between a teacher and a roster. A teacher covering two sections gets two rows.
+        Role <strong>Admin</strong> grants every section plus this console, and admins are never sent the
+        missing-submission reminder.
+      </p>
+
+      <div class="table-scroll" style="margin-top:18px;">
+        <table class="data" id="teacherTable"></table>
+      </div>
+
+      <div class="subhead">
+        <p class="eyebrow">Add one</p>
+        <div class="grid2">
+          <div class="field">
+            <label for="tEmail">Email</label>
+            <input type="text" id="tEmail" placeholder="escott@royhart.org">
+          </div>
+          <div class="field">
+            <label for="tName">Display name</label>
+            <input type="text" id="tName" placeholder="Scott">
+          </div>
+          <div class="field">
+            <label for="tSection">Section</label>
+            <input type="text" id="tSection" placeholder="Scott">
+            <p class="hint">Leave blank only when adding an administrator.</p>
+          </div>
+          <div class="field">
+            <label for="tRoom">Room</label>
+            <input type="text" id="tRoom" placeholder="214">
+          </div>
+          <div class="field">
+            <label for="tRole">Role</label>
+            <select id="tRole"><option>Teacher</option><option>Admin</option></select>
+          </div>
+        </div>
+        <div class="actions"><button type="button" class="btn small" id="addTeacherBtn">Add teacher</button></div>
+      </div>
+
+      <div class="subhead">
+        <p class="eyebrow">Import from CSV</p>
+        <p class="lede" style="margin-bottom:14px;">
+          Needs a <strong>Section</strong> column. Email, Name, Room, Role, and Active are picked up when
+          present, and common header spellings are matched automatically.
+          <button type="button" class="linkbtn" data-template="teachers">Download a template</button>
+        </p>
+        <div class="field">
+          <input type="file" id="tFile" accept=".csv,text/csv">
+          <p class="hint">Or paste the file contents below.</p>
+        </div>
+        <textarea id="tCsv" placeholder="Email,Name,Section,Room,Role,Active"></textarea>
+        <div class="actions">
+          <div class="radios">
+            <label><input type="radio" name="tMode" value="merge" checked> Merge with what's there</label>
+            <label><input type="radio" name="tMode" value="replace"> Replace the whole list</label>
+          </div>
+        </div>
+        <div class="actions"><button type="button" class="btn small" id="tImportBtn">Import teachers</button></div>
+      </div>
+    </div>
+
+    <!-- ---------- roster ---------- -->
+    <div class="card">
+      <p class="eyebrow">Student roster</p>
+      <h2>Who each teacher checks</h2>
+
+      <div class="toolbar" style="margin-top:16px;">
+        <div>
+          <select id="rSectionFilter" aria-label="Section"><option value="">All sections</option></select>
+        </div>
+        <div class="grow"><input type="search" id="rFilter" placeholder="Find a student" aria-label="Find a student"></div>
+      </div>
+
+      <div class="table-scroll" style="margin-top:14px;">
+        <table class="data" id="rosterTable"></table>
+      </div>
+      <div class="pager" id="rosterPager"></div>
+
+      <div class="subhead">
+        <p class="eyebrow">Add by hand</p>
+        <div class="grid2">
+          <div class="field">
+            <label for="rAddSection">Section</label>
+            <select id="rAddSection"></select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rAddNames">Students</label>
+          <textarea id="rAddNames" style="min-height:90px;" placeholder="Doe John&#10;Roe Jane, 102346, 11"></textarea>
+          <p class="hint">One per line. Optionally <em>Name, ID, Grade</em>. Paste a column straight from a spreadsheet.</p>
+        </div>
+        <div class="actions"><button type="button" class="btn small" id="rAddBtn">Add students</button></div>
+      </div>
+
+      <div class="subhead">
+        <p class="eyebrow">Import from CSV</p>
+        <p class="lede" style="margin-bottom:14px;">
+          Needs a <strong>Student Name</strong> column. If there's no Section column, pick a fallback
+          section below and every row lands there.
+          <button type="button" class="linkbtn" data-template="roster">Download a template</button>
+        </p>
+        <div class="field">
+          <input type="file" id="rFile" accept=".csv,text/csv">
+          <p class="hint">Or paste the file contents below.</p>
+        </div>
+        <textarea id="rCsv" placeholder="Student Name,Student ID,Grade,Section,Active"></textarea>
+        <div class="grid2" style="margin-top:14px;">
+          <div class="field">
+            <label for="rDefaultSection">Fallback section</label>
+            <select id="rDefaultSection"><option value="">None \u2014 the file has a Section column</option></select>
+          </div>
+        </div>
+        <div class="actions">
+          <div class="radios">
+            <label><input type="radio" name="rMode" value="merge" checked> Merge with what's there</label>
+            <label><input type="radio" name="rMode" value="replace"> Replace the whole roster</label>
+          </div>
+        </div>
+        <div class="actions"><button type="button" class="btn small" id="rImportBtn">Import students</button></div>
+      </div>
+    </div>
+
+    <!-- ---------- source import ---------- -->
+    <div class="card">
+      <p class="eyebrow">One-time import</p>
+      <h2>Pull from the old collection sheet</h2>
+      <p class="lede">
+        Reads the tabs out of <em>Student HS Cell Phone Collection</em> and turns each one into a section
+        with its roster, carrying over any marks already recorded. Read-only \u2014 that file is never modified,
+        so viewer access is all you need.
+      </p>
+      <p class="lede" id="sourceState" style="margin-top:10px;"></p>
+      <div class="field" style="margin-top:14px;">
+        <label for="srcUrl">Spreadsheet link</label>
+        <input type="text" id="srcUrl" placeholder="https://docs.google.com/spreadsheets/d/.../edit">
+      </div>
+      <div class="actions">
+        <button type="button" class="btn ghost small" id="srcLinkBtn">Link it</button>
+        <button type="button" class="btn small" id="srcImportBtn">Run the import</button>
+      </div>
+    </div>
+
+    <!-- ---------- settings ---------- -->
+    <div class="card">
+      <p class="eyebrow">Settings</p>
+      <h2>How the app behaves</h2>
+      <div id="settingsFields" style="margin-top:18px;"></div>
+      <div class="actions"><button type="button" class="btn" id="saveSettingsBtn">Save settings</button></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  var STATE = null, TEACHERS = [], ROSTER = [], RPAGE = 1, PER_PAGE = 30;
+
+  function el(id) { return document.getElementById(id); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+    });
+  }
+  function alertBox(msg, kind) {
+    el('alerts').innerHTML = '<div class="banner ' + (kind || '') + '">' + esc(msg) + '</div>';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (kind === 'ok') setTimeout(function () { el('alerts').innerHTML = ''; }, 7000);
+  }
+  function fail(btn, label) {
+    return function (err) {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+      alertBox(err.message || String(err), 'error');
+    };
+  }
+
+  function load() {
+    el('boot').style.display = '';
+    google.script.run
+      .withSuccessHandler(onPayload)
+      .withFailureHandler(function (err) {
+        el('boot').style.display = 'none';
+        alertBox(err.message || String(err), 'error');
+      })
+      .getAdminPayload();
+  }
+  load();
+
+  function onPayload(p) {
+    TEACHERS = p.teachers || [];
+    ROSTER = p.roster || [];
+    RPAGE = 1;
+    onState(p.state);
+  }
+
+  function onState(s) {
+    STATE = s;
+    el('boot').style.display = 'none';
+    el('logo').src = s.logoUrl;
+    el('schoolName').textContent = s.schoolName;
+    el('who').textContent = s.name || s.email;
+
+    el('setupView').style.display = 'none';
+    el('denyView').style.display = 'none';
+    el('adminView').style.display = 'none';
+
+    if (!s.ready) {
+      el('setupView').style.display = '';
+      if (!s.isOwner) {
+        el('setupBtn').disabled = true;
+        el('setupNote').textContent = 'Only the person who deployed this app can run setup. Ask the tech office.';
+      }
+      return;
+    }
+
+    el('checkLink').href = s.appUrl;
+    el('checkLink').style.display = '';
+    el('reportLink').href = s.appUrl + '?page=report';
+    el('reportLink').style.display = '';
+
+    if (!s.isAdmin) {
+      el('denyBack').href = s.appUrl;
+      el('denyView').style.display = '';
+      return;
+    }
+
+    el('adminView').style.display = '';
+    el('dataName').textContent = s.dataName;
+    el('dataLink').href = s.dataUrl;
+    el('urlCheck').textContent = s.appUrl || 'Deploy the web app to get a link.';
+    el('urlReport').textContent = s.appUrl ? s.appUrl + '?page=report' : '\u2014';
+
+    el('tiles').innerHTML =
+      tile(s.counts.sections, 'Sections') +
+      tile(s.counts.teachers, 'Linked accounts') +
+      tile(s.counts.students.toLocaleString(), 'Active students') +
+      tile(s.counts.entries.toLocaleString(), 'Entries logged');
+
+    el('triggerState').textContent = s.triggersInstalled
+      ? 'Reminders and the digest are scheduled. Re-installing picks up a changed reminder hour.'
+      : 'Not scheduled yet. Teachers will not get the nudge and admin will not get the digest.';
+    el('triggerBtn').textContent = s.triggersInstalled ? 'Reinstall daily reminders' : 'Install daily reminders';
+
+    el('sourceState').innerHTML = s.sourceError
+      ? '<span class="chip warn">Problem</span> ' + esc(s.sourceError)
+      : (s.sourceLinked
+          ? 'Linked to <strong>' + esc(s.sourceName) + '</strong>. Running the import again only adds what is missing.'
+          : 'Nothing linked yet. Paste the link below.');
+
+    fillSections(s.sections);
+    renderSettings(s.settings);
+    renderTeachers();
+    renderRoster();
+  }
+
+  function tile(v, label) {
+    return '<div class="tile"><div class="value">' + v + '</div><div class="label">' + label + '</div></div>';
+  }
+
+  function fillSections(sections) {
+    [['rSectionFilter', 'All sections'], ['rDefaultSection', 'None \u2014 the file has a Section column'], ['rAddSection', '']]
+      .forEach(function (pair) {
+        var sel = el(pair[0]);
+        sel.innerHTML = pair[1] ? '<option value="">' + esc(pair[1]) + '</option>' : '';
+        sections.forEach(function (s) {
+          var o = document.createElement('option');
+          o.value = s; o.textContent = s; sel.appendChild(o);
+        });
+      });
+  }
+
+  // ---- setup --------------------------------------------------------------
+  el('setupBtn').addEventListener('click', function () {
+    var btn = el('setupBtn');
+    btn.disabled = true; btn.textContent = 'Creating\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        alertBox('Created "' + res.name + '". Next: import the old collection sheet, or add teachers.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Create it now'))
+      .runSetup();
+  });
+
+  // ---- teachers -----------------------------------------------------------
+  function renderTeachers() {
+    var head = '<thead><tr><th>Section</th><th>Name</th><th>Email</th><th>Room</th>' +
+               '<th>Role</th><th>Status</th><th></th></tr></thead>';
+    var body = TEACHERS.map(function (t, i) {
+      var missing = !t.email;
+      return '<tr>' +
+        '<td><strong>' + esc(t.section || '\u2014') + '</strong></td>' +
+        '<td>' + esc(t.name || '\u2014') + '</td>' +
+        '<td>' + (missing ? '<span class="chip warn">Needs an email</span>' : esc(t.email)) + '</td>' +
+        '<td>' + esc(t.room || '\u2014') + '</td>' +
+        '<td>' + (t.role.toLowerCase() === 'admin' ? '<span class="chip admin">Admin</span>' : 'Teacher') + '</td>' +
+        '<td><span class="chip ' + (t.active ? 'on' : 'off') + '">' + (t.active ? 'Active' : 'Off') + '</span></td>' +
+        '<td class="num"><button type="button" class="linkbtn' + (t.active ? ' danger' : '') + '" data-t="' + i + '">' +
+          (t.active ? 'Deactivate' : 'Reactivate') + '</button></td>' +
+      '</tr>';
+    }).join('');
+    el('teacherTable').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="7" class="muted">Nobody yet. Add someone below, or import the old collection sheet.</td></tr>') +
+      '</tbody>';
+  }
+
+  el('teacherTable').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-t]');
+    if (!btn) return;
+    var t = TEACHERS[Number(btn.getAttribute('data-t'))];
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function () { load(); })
+      .withFailureHandler(fail(null))
+      .updateTeacher({ email: t.email, section: t.section }, { active: !t.active });
+  });
+
+  el('addTeacherBtn').addEventListener('click', function () {
+    var btn = el('addTeacherBtn');
+    btn.disabled = true; btn.textContent = 'Adding\u2026';
+    google.script.run
+      .withSuccessHandler(function () {
+        btn.disabled = false; btn.textContent = 'Add teacher';
+        ['tEmail', 'tName', 'tSection', 'tRoom'].forEach(function (id) { el(id).value = ''; });
+        alertBox('Added.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Add teacher'))
+      .addTeacher({
+        email: el('tEmail').value, name: el('tName').value, section: el('tSection').value,
+        room: el('tRoom').value, role: el('tRole').value
+      });
+  });
+
+  // ---- roster -------------------------------------------------------------
+  function filteredRoster() {
+    var section = el('rSectionFilter').value;
+    var q = el('rFilter').value.trim().toLowerCase();
+    return ROSTER.filter(function (r) {
+      if (section && r.section !== section) return false;
+      if (q && r.name.toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+
+  function renderRoster() {
+    var rows = filteredRoster();
+    var pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+    if (RPAGE > pages) RPAGE = pages;
+    var slice = rows.slice((RPAGE - 1) * PER_PAGE, RPAGE * PER_PAGE);
+
+    var head = '<thead><tr><th>Student</th><th>Section</th><th>ID</th><th>Grade</th><th>Status</th><th></th></tr></thead>';
+    var body = slice.map(function (r) {
+      var idx = ROSTER.indexOf(r);
+      return '<tr>' +
+        '<td><strong>' + esc(r.name) + '</strong></td>' +
+        '<td>' + esc(r.section) + '</td>' +
+        '<td>' + esc(r.id || '\u2014') + '</td>' +
+        '<td>' + esc(r.grade || '\u2014') + '</td>' +
+        '<td><span class="chip ' + (r.active ? 'on' : 'off') + '">' + (r.active ? 'Active' : 'Off') + '</span></td>' +
+        '<td class="num"><button type="button" class="linkbtn' + (r.active ? ' danger' : '') + '" data-r="' + idx + '">' +
+          (r.active ? 'Remove' : 'Put back') + '</button></td>' +
+      '</tr>';
+    }).join('');
+
+    el('rosterTable').innerHTML = head + '<tbody>' +
+      (body || '<tr><td colspan="6" class="muted">No students match.</td></tr>') + '</tbody>';
+
+    el('rosterPager').innerHTML =
+      '<span class="muted">' + rows.length.toLocaleString() + ' students \u00b7 page ' + RPAGE + ' of ' + pages + '</span>' +
+      '<button type="button" id="rPrev"' + (RPAGE <= 1 ? ' disabled' : '') + '>Previous</button>' +
+      '<button type="button" id="rNext"' + (RPAGE >= pages ? ' disabled' : '') + '>Next</button>';
+    el('rPrev').onclick = function () { if (RPAGE > 1) { RPAGE--; renderRoster(); } };
+    el('rNext').onclick = function () { if (RPAGE < pages) { RPAGE++; renderRoster(); } };
+  }
+
+  el('rSectionFilter').addEventListener('change', function () { RPAGE = 1; renderRoster(); });
+  el('rFilter').addEventListener('input', function () { RPAGE = 1; renderRoster(); });
+
+  el('rosterTable').addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-r]');
+    if (!btn) return;
+    var r = ROSTER[Number(btn.getAttribute('data-r'))];
+    if (r.active && !confirm('Remove ' + r.name + ' from ' + r.section + '? Past entries are kept.')) return;
+    btn.disabled = true;
+    google.script.run
+      .withSuccessHandler(function () { load(); })
+      .withFailureHandler(fail(null))
+      .setStudentActive(r.section, r.name, !r.active);
+  });
+
+  el('rAddBtn').addEventListener('click', function () {
+    var section = el('rAddSection').value;
+    if (!section) { alertBox('Pick a section first.', 'error'); return; }
+    var btn = el('rAddBtn');
+    btn.disabled = true; btn.textContent = 'Adding\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Add students';
+        el('rAddNames').value = '';
+        alertBox(res.added + ' added, ' + res.reactivated + ' put back on the list.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Add students'))
+      .addStudents(section, el('rAddNames').value);
+  });
+
+  // ---- CSV --------------------------------------------------------------
+  function wireFile(fileId, textId) {
+    el(fileId).addEventListener('change', function (e) {
+      var f = e.target.files[0];
+      if (!f) return;
+      var reader = new FileReader();
+      reader.onload = function () { el(textId).value = reader.result; };
+      reader.onerror = function () { alertBox('That file could not be read.', 'error'); };
+      reader.readAsText(f);
+    });
+  }
+  wireFile('tFile', 'tCsv');
+  wireFile('rFile', 'rCsv');
+
+  function modeOf(name) {
+    var picked = document.querySelector('input[name="' + name + '"]:checked');
+    return picked ? picked.value : 'merge';
+  }
+
+  el('tImportBtn').addEventListener('click', function () {
+    var text = el('tCsv').value.trim();
+    if (!text) { alertBox('Choose a file or paste the CSV first.', 'error'); return; }
+    var mode = modeOf('tMode');
+    if (mode === 'replace' && !confirm('Replace the whole teacher list with this file?')) return;
+    var btn = el('tImportBtn');
+    btn.disabled = true; btn.textContent = 'Importing\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Import teachers';
+        el('tCsv').value = ''; el('tFile').value = '';
+        alertBox(res.added + ' added, ' + res.updated + ' updated, out of ' + res.total + ' rows.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Import teachers'))
+      .importTeachersCsv(text, mode);
+  });
+
+  el('rImportBtn').addEventListener('click', function () {
+    var text = el('rCsv').value.trim();
+    if (!text) { alertBox('Choose a file or paste the CSV first.', 'error'); return; }
+    var mode = modeOf('rMode');
+    if (mode === 'replace' && !confirm('Replace the whole roster with this file?')) return;
+    var btn = el('rImportBtn');
+    btn.disabled = true; btn.textContent = 'Importing\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Import students';
+        el('rCsv').value = ''; el('rFile').value = '';
+        var msg = res.added + ' added, ' + res.updated + ' updated, out of ' + res.total + ' rows.';
+        if (res.skipped) msg += ' ' + res.skipped + ' skipped for having no section \u2014 pick a fallback section and run it again.';
+        alertBox(msg, res.skipped ? '' : 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Import students'))
+      .importRosterCsv(text, mode, el('rDefaultSection').value);
+  });
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('button[data-template]');
+    if (!btn) return;
+    var kind = btn.getAttribute('data-template');
+    google.script.run
+      .withSuccessHandler(function (csv) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+        a.download = 'phone-check-' + kind + '-template.csv';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      })
+      .withFailureHandler(fail(null))
+      .getCsvTemplate(kind);
+  });
+
+  // ---- source import ------------------------------------------------------
+  el('srcLinkBtn').addEventListener('click', function () {
+    var btn = el('srcLinkBtn');
+    btn.disabled = true; btn.textContent = 'Checking\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Link it';
+        el('srcUrl').value = '';
+        alertBox('Linked to "' + res.name + '".', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Link it'))
+      .setSourceSheet(el('srcUrl').value);
+  });
+
+  el('srcImportBtn').addEventListener('click', function () {
+    var btn = el('srcImportBtn');
+    btn.disabled = true; btn.textContent = 'Importing\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Run the import';
+        alertBox('Read ' + res.tabs + ' tabs from "' + res.sourceName + '": ' +
+                 res.sections + ' new sections, ' + res.students + ' students, ' +
+                 res.entries + ' past entries. Add email addresses to the teacher rows next.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Run the import'))
+      .importFromSource();
+  });
+
+  // ---- triggers and grid --------------------------------------------------
+  el('triggerBtn').addEventListener('click', function () {
+    var btn = el('triggerBtn');
+    var label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Installing\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false;
+        alertBox('Reminders scheduled for ' + res.hour + ':00, digest an hour later.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, label))
+      .installTriggers();
+  });
+
+  el('gridBtn').addEventListener('click', function () {
+    var btn = el('gridBtn');
+    btn.disabled = true; btn.textContent = 'Building\u2026';
+    google.script.run
+      .withSuccessHandler(function (res) {
+        btn.disabled = false; btn.textContent = 'Rebuild printable grid';
+        alertBox('Grid View rebuilt: ' + res.rows + ' students across ' + res.days + ' days.', 'ok');
+      })
+      .withFailureHandler(fail(btn, 'Rebuild printable grid'))
+      .rebuildGridView();
+  });
+
+  // ---- settings -----------------------------------------------------------
+  function renderSettings(settings) {
+    el('settingsFields').innerHTML = settings.map(function (s) {
+      return '<div class="field">' +
+        '<label for="set_' + s.key + '">' + esc(s.key) + '</label>' +
+        '<input type="text" id="set_' + s.key + '" value="' + esc(s.value) + '">' +
+        '<p class="hint">' + esc(s.note) + '</p>' +
+      '</div>';
+    }).join('');
+  }
+
+  el('saveSettingsBtn').addEventListener('click', function () {
+    var map = {};
+    STATE.settings.forEach(function (s) { map[s.key] = el('set_' + s.key).value; });
+    var btn = el('saveSettingsBtn');
+    btn.disabled = true; btn.textContent = 'Saving\u2026';
+    google.script.run
+      .withSuccessHandler(function () {
+        btn.disabled = false; btn.textContent = 'Save settings';
+        alertBox('Settings saved.', 'ok');
+        load();
+      })
+      .withFailureHandler(fail(btn, 'Save settings'))
+      .saveSettings(map);
+  });
+</script>
+</body>
+</html>
